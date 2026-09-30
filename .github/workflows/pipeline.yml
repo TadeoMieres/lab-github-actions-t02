@@ -1,5 +1,10 @@
 name: Pipeline DevOps
 
+env:                          # ← nivel workflow (disponible en todos los jobs)
+  APP_NAME: lab-github-actions
+  REGISTRY: docker.io
+  IMAGE_TAG: ${{ github.sha }}
+
 on:
   push:
     branches: [main]
@@ -11,6 +16,10 @@ jobs:
   build-and-push:
     name: Build & Push Docker Image
     runs-on: ubuntu-latest
+    outputs:
+      image-tag: ${{ steps.tag.outputs.value }}   # ← expone el output del job
+    env:                      # ← nivel job (disponible en todos los steps del job)
+      BUILD_TARGET: production
     steps:
       - name: Checkout código
         uses: actions/checkout@v4
@@ -29,6 +38,63 @@ jobs:
           tags: |
             ${{ secrets.DOCKERHUB_USERNAME }}/lab-github-actions:latest
             ${{ secrets.DOCKERHUB_USERNAME }}/lab-github-actions:${{ github.sha }}
+
+      - name: Imprimir contexto
+        run: |
+          echo "SHA: ${{ github.sha }}"
+          echo "Branch: ${{ github.ref_name }}"
+          echo "Evento: ${{ github.event_name }}"
+          echo "Actor: ${{ github.actor }}"
+          echo "Runner OS: ${{ runner.os }}"
+
+      - name: Usar variables
+        env:                  # ← nivel step (solo en este step)
+          STEP_VAR: valor-local
+        run: |
+          echo "App: $APP_NAME"
+          echo "Target: $BUILD_TARGET"
+
+      - name: Generar tag de imagen
+          id: tag           # ← necesario para referenciarlo después
+          run: |
+            SHORT_SHA=$(echo "${{ github.sha }}" | cut -c1-7)
+            echo "value=$SHORT_SHA" >> $GITHUB_OUTPUT
+
+      - name: Usar el tag
+          run: echo "Tag: ${{ steps.tag.outputs.value }}"  echo "Step var: $STEP_VAR" 
+
+      - name: Generar tag
+        id: tag
+        run: |
+          SHORT_SHA=$(echo "${{ github.sha }}" | cut -c1-7)
+          echo "value=$SHORT_SHA" >> $GITHUB_OUTPUT
+
+      - name: Generar reporte
+        run: |
+          mkdir -p reports
+          echo "Build: OK" > reports/build-report.txt
+          echo "SHA: ${{ github.sha }}" >> reports/build-report.txt
+          echo "Fecha: $(date -u)" >> reports/build-report.txt
+
+      - name: Subir reporte
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-report
+          path: reports/
+          retention-days: 30       # opcional, default 90
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Descargar reporte
+        uses: actions/download-artifact@v4
+        with:
+          name: build-report
+          path: reports/
+
+      - name: Usar el reporte
+        run: cat reports/build-report.txt
+
   scan:
     name: Scan de seguridad (Trivy)
     runs-on: ubuntu-latest
@@ -62,3 +128,5 @@ jobs:
     steps:
       - name: Simular tests
         run: echo "Tests pendientes — se implementan en el siguiente paso"
+    - name: Usar tag del job anterior
+      run: echo "Escaneando imagen con tag ${{ needs.build.outputs.image-tag }}"
