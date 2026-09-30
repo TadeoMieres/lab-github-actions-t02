@@ -47,27 +47,16 @@ jobs:
           echo "Actor: ${{ github.actor }}"
           echo "Runner OS: ${{ runner.os }}"
 
-      - name: Usar variables
-        env:                  # ← nivel step (solo en este step)
-          STEP_VAR: valor-local
-        run: |
-          echo "App: $APP_NAME"
-          echo "Target: $BUILD_TARGET"
-
       - name: Generar tag de imagen
-          id: tag           # ← necesario para referenciarlo después
-          run: |
+        id: tag           # ← necesario para referenciarlo después
+        run: |
             SHORT_SHA=$(echo "${{ github.sha }}" | cut -c1-7)
             echo "value=$SHORT_SHA" >> $GITHUB_OUTPUT
 
       - name: Usar el tag
-          run: echo "Tag: ${{ steps.tag.outputs.value }}"  echo "Step var: $STEP_VAR" 
-
-      - name: Generar tag
-        id: tag
         run: |
-          SHORT_SHA=$(echo "${{ github.sha }}" | cut -c1-7)
-          echo "value=$SHORT_SHA" >> $GITHUB_OUTPUT
+          echo "Tag: ${{ steps.tag.outputs.value }}"
+          echo "Step var: $STEP_VAR"
 
       - name: Generar reporte
         run: |
@@ -83,7 +72,7 @@ jobs:
           path: reports/
           retention-days: 30       # opcional, default 90
   deploy:
-    needs: build
+    needs: build-and-push
     runs-on: ubuntu-latest
     steps:
       - name: Descargar reporte
@@ -128,5 +117,5 @@ jobs:
     steps:
       - name: Simular tests
         run: echo "Tests pendientes — se implementan en el siguiente paso"
-    - name: Usar tag del job anterior
-      run: echo "Escaneando imagen con tag ${{ needs.build.outputs.image-tag }}"
+      - name: Usar tag del job anterior
+        run: echo "Escaneando imagen con tag ${{ needs.build-and-push.outputs.image-tag }}"
